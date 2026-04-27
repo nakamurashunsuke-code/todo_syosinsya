@@ -1,34 +1,22 @@
-const STORAGE_KEY = "todo-items";
-
 const form = document.getElementById("todo-form");
 const input = document.getElementById("todo-input");
 const list = document.getElementById("todo-list");
 const remainingCount = document.getElementById("remaining-count");
 const completedCount = document.getElementById("completed-count");
+const appMessage = document.getElementById("app-message");
 
-let todos = loadTodos();
+let todos = [];
+const config = window.APP_CONFIG || {};
+const supabaseUrl = config.SUPABASE_URL;
+const supabaseAnonKey = config.SUPABASE_ANON_KEY;
+const client =
+  supabaseUrl && supabaseAnonKey
+    ? window.supabase.createClient(supabaseUrl, supabaseAnonKey)
+    : null;
 
-function loadTodos() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed.filter(
-      (item) =>
-        typeof item.id === "string" &&
-        typeof item.text === "string" &&
-        typeof item.completed === "boolean"
-    );
-  } catch {
-    return [];
-  }
-}
-
-function saveTodos() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+function setMessage(message, isError = false) {
+  appMessage.textContent = message;
+  appMessage.classList.toggle("error", isError);
 }
 
 function updateStatus() {
@@ -41,7 +29,7 @@ function updateStatus() {
 function createTodoElement(todo) {
   const item = document.createElement("li");
   item.className = `todo-item${todo.completed ? " completed" : ""}`;
-  item.dataset.id = todo.id;
+  item.dataset.id = String(todo.id);
 
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
@@ -57,8 +45,12 @@ function createTodoElement(todo) {
   deleteButton.type = "button";
   deleteButton.textContent = "削除";
 
-  checkbox.addEventListener("change", () => toggleTodo(todo.id));
-  deleteButton.addEventListener("click", () => deleteTodo(todo.id));
+  checkbox.addEventListener("change", () => {
+    void toggleTodo(todo.id, checkbox.checked);
+  });
+  deleteButton.addEventListener("click", () => {
+    void deleteTodo(todo.id);
+  });
 
   item.append(checkbox, text, deleteButton);
   return item;
@@ -81,28 +73,36 @@ function render() {
   updateStatus();
 }
 
-function addTodo(text) {
-  todos.unshift({
-    id: crypto.randomUUID(),
-    text,
-    completed: false,
-  });
-  saveTodos();
+async function fetchTodos() {
+  const { data, error } = await client
+    .from("todos")
+    .select("id, text, completed, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  todos = data || [];
   render();
 }
 
-function toggleTodo(id) {
-  todos = todos.map((todo) =>
-    todo.id === id ? { ...todo, completed: !todo.completed } : todo
-  );
-  saveTodos();
-  render();
+async function addTodo(text) {
+  const { error } = await client.from("todos").insert({ text, completed: false });
+  if (error) throw error;
+
+  await fetchTodos();
 }
 
-function deleteTodo(id) {
-  todos = todos.filter((todo) => todo.id !== id);
-  saveTodos();
-  render();
+async function toggleTodo(id, completed) {
+  const { error } = await client.from("todos").update({ completed }).eq("id", id);
+  if (error) throw error;
+
+  await fetchTodos();
+}
+
+async function deleteTodo(id) {
+  const { error } = await client.from("todos").delete().eq("id", id);
+  if (error) throw error;
+
+  await fetchTodos();
 }
 
 form.addEventListener("submit", (event) => {
@@ -111,9 +111,31 @@ form.addEventListener("submit", (event) => {
   const text = input.value.trim();
   if (!text) return;
 
-  addTodo(text);
-  input.value = "";
-  input.focus();
+  void (async () => {
+    try {
+      await addTodo(text);
+      input.value = "";
+      input.focus();
+      setMessage("タスクを追加しました");
+    } catch {
+      setMessage("タスク追加に失敗しました", true);
+    }
+  })();
 });
 
-render();
+async function initialize() {
+  if (!client) {
+    setMessage("config.js に Supabase の URL と anon key を設定してください", true);
+    return;
+  }
+
+  setMessage("読み込み中...");
+  try {
+    await fetchTodos();
+    setMessage("");
+  } catch {
+    setMessage("Supabase接続に失敗しました。設定とテーブル作成を確認してください", true);
+  }
+}
+
+void initialize();
