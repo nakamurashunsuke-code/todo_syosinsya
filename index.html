@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TODOリスト</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <h1>TODOリスト</h1>
+      <p class="description">毎日のタスクをシンプルに管理</p>
+
+      <form id="todo-form" class="todo-form">
+        <label for="todo-input" class="sr-only">タスク名</label>
+        <input
+          id="todo-input"
+          type="text"
+          placeholder="例: 資料を提出する"
+          maxlength="100"
+          required
+        />
+        <button type="submit">追加</button>
+      </form>
+
+      <section class="status" aria-live="polite">
+        <span id="remaining-count">未完了: 0</span>
+        <span id="completed-count">完了: 0</span>
+      </section>
+
+      <ul id="todo-list" class="todo-list"></ul>
+    </main>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
